@@ -379,11 +379,11 @@ public class SwerveDrive extends SubsystemBase {
 
   @Override
   public void periodic() {
-    updateOdometry();
-    RobotContainer.field.setRobotPose(Field.flipPose(poseEstimator.getEstimatedPosition()));
+    //updateOdometry();
+    //RobotContainer.field.setRobotPose(Field.flipPose(poseEstimator.getEstimatedPosition()));
     SmartDashboard.putNumber("Pose angle", getPose().getRotation().getDegrees());
     SmartDashboard.putBoolean("Calibrated", isCalibrated);
-    logTargetChassisSpeeds(getChassisSpeeds());
+    //logTargetChassisSpeeds(getChassisSpeeds());
   }
 
 }
