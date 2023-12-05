@@ -44,7 +44,7 @@ public class Field {
   public static AprilTagFieldLayout fieldLayout;
   static {
     try {
-      AprilTagFieldLayout aprilTagFieldLayout = AprilTagFieldLayout.loadFromResource(AprilTagFields.k2023ChargedUp.m_resourceFile);
+      fieldLayout = AprilTagFieldLayout.loadFromResource(AprilTagFields.k2023ChargedUp.m_resourceFile);
     } catch (IOException e) {
       e.printStackTrace();
     }

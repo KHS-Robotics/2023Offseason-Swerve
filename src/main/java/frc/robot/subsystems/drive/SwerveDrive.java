@@ -7,15 +7,10 @@
 
 package frc.robot.subsystems.drive;
 
-
-import java.util.Optional;
-
-import org.photonvision.EstimatedRobotPose;
-
 import edu.wpi.first.math.MathUtil;
-import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
+import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -28,7 +23,6 @@ import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.RobotMap;
-import frc.robot.subsystems.vision.PhotonWrapper;
 import frc.robot.Constants;
 import frc.robot.Field;
 import frc.robot.RobotContainer;
@@ -39,6 +33,8 @@ import frc.robot.RobotContainer;
 public class SwerveDrive extends SubsystemBase {
   public static double kMaxSpeedMetersPerSecond = 3.5;
   public static double kMaxAngularSpeedRadiansPerSecond = 2 * Math.PI;
+  public static double kMaxAcceleration = 99;
+  public static double kMaxDeceleration = -8; // this is based on nothing at all
   public static double offset;
   public Pose2d startingPose;
   public double angleSetpoint;
@@ -48,9 +44,10 @@ public class SwerveDrive extends SubsystemBase {
   private final Translation2d rearLeftLocation = new Translation2d(-0.2984, 0.2984);
   private final Translation2d rearRightLocation = new Translation2d(-0.2984, -0.2984);
 
-  public double currentX, currentY;
+  private SlewRateLimiter xRateLimiter;
+  private SlewRateLimiter yRateLimiter;
 
-  public PhotonWrapper photonCamera;
+  public double currentX, currentY;
 
   public boolean isCalibrated = false;
   private boolean loggedPoseError = false;
@@ -68,7 +65,8 @@ public class SwerveDrive extends SubsystemBase {
       Constants.DRIVE_KS,
       Constants.DRIVE_KV,
       Constants.DRIVE_KA,
-      RobotMap.FRONT_LEFT_PIVOT_ENCODER);
+      RobotMap.FRONT_LEFT_PIVOT_ENCODER,
+      225);
   public static final SwerveModule frontRight = new SwerveModule(
       "FR",
       RobotMap.FRONT_RIGHT_DRIVE,
@@ -82,7 +80,8 @@ public class SwerveDrive extends SubsystemBase {
       Constants.DRIVE_KS,
       Constants.DRIVE_KV,
       Constants.DRIVE_KA,
-      RobotMap.FRONT_RIGHT_PIVOT_ENCODER);
+      RobotMap.FRONT_RIGHT_PIVOT_ENCODER,
+      135);
   public static final SwerveModule rearLeft = new SwerveModule(
       "RL",
       RobotMap.REAR_LEFT_DRIVE,
@@ -96,7 +95,8 @@ public class SwerveDrive extends SubsystemBase {
       Constants.DRIVE_KS,
       Constants.DRIVE_KV,
       Constants.DRIVE_KA,
-      RobotMap.REAR_LEFT_PIVOT_ENCODER);
+      RobotMap.REAR_LEFT_PIVOT_ENCODER,
+      315);
   public static final SwerveModule rearRight = new SwerveModule(
       "RR",
       RobotMap.REAR_RIGHT_DRIVE,
@@ -110,7 +110,8 @@ public class SwerveDrive extends SubsystemBase {
       Constants.DRIVE_KS,
       Constants.DRIVE_KV,
       Constants.DRIVE_KA,
-      RobotMap.REAR_RIGHT_PIVOT_ENCODER);
+      RobotMap.REAR_RIGHT_PIVOT_ENCODER,
+      45);
 
   public final SwerveDriveKinematics kinematics = new SwerveDriveKinematics(frontLeftLocation,
       frontRightLocation, rearLeftLocation, rearRightLocation);
@@ -130,11 +131,13 @@ public class SwerveDrive extends SubsystemBase {
    * Constructs Swerve Drive
    */
   public SwerveDrive() {
-    photonCamera = new PhotonWrapper("cameraOne");
 
     targetPid = new PIDController(Constants.TARGET_P, Constants.TARGET_I, Constants.TARGET_D);
     targetPid.enableContinuousInput(-180.0, 180.0);
     targetPid.setTolerance(1);
+
+    xRateLimiter = new SlewRateLimiter(kMaxAcceleration, kMaxDeceleration, 0);
+    yRateLimiter = new SlewRateLimiter(kMaxAcceleration, kMaxDeceleration, 0);
   }
 
   /**
@@ -177,8 +180,8 @@ public class SwerveDrive extends SubsystemBase {
     } else {
       var swerveModuleStates = kinematics
           .toSwerveModuleStates(
-              fieldRelative ? ChassisSpeeds.fromFieldRelativeSpeeds(xSpeed, ySpeed, rot, getPose().getRotation())
-                  : new ChassisSpeeds(xSpeed, ySpeed, rot));
+              fieldRelative ? ChassisSpeeds.fromFieldRelativeSpeeds(xRateLimiter.calculate(xSpeed), yRateLimiter.calculate(ySpeed), rot, getPose().getRotation())
+                  : new ChassisSpeeds(xRateLimiter.calculate(xSpeed), yRateLimiter.calculate(ySpeed), rot));
 
       frontLeft.setDesiredState(swerveModuleStates[0]);
       frontRight.setDesiredState(swerveModuleStates[1]);
@@ -212,7 +215,9 @@ public class SwerveDrive extends SubsystemBase {
   }
 
   public void holdAngleWhileDriving(double x, double y, Rotation2d setAngle, boolean fieldOriented) {
-    var rotateOutput = MathUtil.clamp(targetPid.calculate(poseEstimator.getEstimatedPosition().getRotation().getDegrees(), normalizeAngle(setAngle.getDegrees())), -1, 1) * kMaxAngularSpeedRadiansPerSecond;
+    var rotateOutput = MathUtil.clamp(targetPid.calculate(
+        poseEstimator.getEstimatedPosition().getRotation().getDegrees(), normalizeAngle(setAngle.getDegrees())), -1, 1)
+        * kMaxAngularSpeedRadiansPerSecond;
     this.drive(x, y, rotateOutput, fieldOriented);
   }
 
@@ -257,37 +262,19 @@ public class SwerveDrive extends SubsystemBase {
 
     if (!this.loggedPoseError && (Double.isNaN(pose.getX()) || Double.isNaN(pose.getY()))) {
       this.loggedPoseError = true;
-      for(var pos : modulePositions) {
+      for (var pos : modulePositions) {
         DriverStation.reportError("Bad module state! Check output for details.", false);
         System.err.println("Bad module states: " + pos);
       }
     }
 
-    Optional<EstimatedRobotPose> estimatedPose = photonCamera.getEstimatedGlobalPose();
-    if (estimatedPose.isPresent()) {
-      EstimatedRobotPose robotPose = estimatedPose.get();
-      double minimum = 1;
-      double distance = 100;
-      for(var target : robotPose.targetsUsed) {
-        
-        double ambiguity = target.getPoseAmbiguity();
-        if(ambiguity < minimum) {
-          minimum = ambiguity;
-          distance = target.getBestCameraToTarget().getTranslation().getNorm();
-        }
-      }
-
-      if(minimum < 0.05 && poseEstimator.getEstimatedPosition().getTranslation().getDistance(getPose().getTranslation()) < 0.6 && distance < 2) {
-        poseEstimator.addVisionMeasurement(Field.flipPose(robotPose.estimatedPose.toPose2d()), robotPose.timestampSeconds, VecBuilder.fill(distance / 2, distance / 2, 500));
-      }
-    }
   }
-  
 
   public void resetOdometry() {
     RobotContainer.navx.reset();
     offset = Math.toDegrees(Math.PI);
-    poseEstimator.resetPosition(getAngle(), getSwerveModulePositions(), new Pose2d(this.getPose().getX(), this.getPose().getY(), new Rotation2d(Math.PI)));
+    poseEstimator.resetPosition(getAngle(), getSwerveModulePositions(),
+        new Pose2d(this.getPose().getX(), this.getPose().getY(), new Rotation2d(Math.PI)));
   }
 
   public ChassisSpeeds getChassisSpeeds() {
@@ -332,7 +319,6 @@ public class SwerveDrive extends SubsystemBase {
     rearRight.setDesiredState(0, -45);
     rearLeft.setDesiredState(0, 45);
   }
-
 
   public void resetNavx() {
     resetNavx(getPose());
@@ -379,11 +365,11 @@ public class SwerveDrive extends SubsystemBase {
 
   @Override
   public void periodic() {
-    //updateOdometry();
-    //RobotContainer.field.setRobotPose(Field.flipPose(poseEstimator.getEstimatedPosition()));
+    updateOdometry();
+    RobotContainer.field.setRobotPose(Field.flipPose(poseEstimator.getEstimatedPosition()));
     SmartDashboard.putNumber("Pose angle", getPose().getRotation().getDegrees());
     SmartDashboard.putBoolean("Calibrated", isCalibrated);
-    //logTargetChassisSpeeds(getChassisSpeeds());
+    logTargetChassisSpeeds(getChassisSpeeds());
   }
 
 }

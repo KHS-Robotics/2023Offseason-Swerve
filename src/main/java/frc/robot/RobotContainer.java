@@ -6,28 +6,23 @@
 package frc.robot;
 
 import com.kauailabs.navx.frc.AHRS;
+
+import com.pathplanner.lib.auto.SwerveAutoBuilder;
+
 import edu.wpi.first.wpilibj.PowerDistribution;
 import edu.wpi.first.wpilibj.RobotState;
 import edu.wpi.first.wpilibj.SerialPort.Port;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
-import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj2.command.InstantCommand;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
+
 import frc.robot.commands.drive.CenterSwerveModules;
 import frc.robot.commands.drive.DriveSwerveWithXbox;
-import frc.robot.commands.drive.HoldAngleWithXbox;
 import frc.robot.subsystems.drive.SwerveDrive;
+import frc.robot.subsystems.lighting.OldLEDStrip;
 
-/**
- * This class is where the bulk of the robot should be declared. Since
- * Command-based is a
- * "declarative" paradigm, very little robot logic should actually be handled in
- * the {@link Robot}
- * periodic methods (other than the scheduler calls). Instead, the structure of
- * the robot (including
- * subsystems, commands, and trigger mappings) should be declared here.
- */
 public class RobotContainer {
   private static RobotContainer instance;
 
@@ -38,7 +33,15 @@ public class RobotContainer {
     return instance;
   }
 
-  public static final AHRS navx = new AHRS(Port.kMXP);
+  private static final SendableChooser<AutoRoutine> autoChooser = new SendableChooser<>();
+  public static SwerveAutoBuilder swerveAutoBuilder;
+
+  /** Gets the selected autonomous command. */
+  public AutoRoutine getAutoRoutine() {
+    return autoChooser.getSelected();
+  }
+
+  public static final AHRS navx = new AHRS(Port.kUSB);
 
   /**
    * Returns the angle or "yaw" of the robot in degrees. CW positive ranging from
@@ -65,9 +68,13 @@ public class RobotContainer {
 
   // Human Interface Devices (HIDs)
   public static final CommandXboxController driverController = new CommandXboxController(RobotMap.XBOX_PORT);
+  public static final OperatorBox operatorBox = new OperatorBox(RobotMap.SWITCHBOX_PORT);
+  public static final OperatorStick operatorStick = new OperatorStick(RobotMap.JOYSTICK_PORT);
 
   // Subsystems
   public static final SwerveDrive swerveDrive = new SwerveDrive();
+
+  public static final OldLEDStrip leds = new OldLEDStrip();
 
   /**
    * The container for the robot. Contains subsystems, OI devices, and commands.
@@ -80,22 +87,10 @@ public class RobotContainer {
   /** Configures the subsystem's default commands. */
   private void configureSubsystemDefaultCommands() {
     swerveDrive.setDefaultCommand(new DriveSwerveWithXbox());
+    // arm.setDefaultCommand(new ArmHoldSetpoint());
+    // wrist.setDefaultCommand(new WristHoldSetpoint());
   }
 
-  /**
-   * Use this method to define your trigger->command mappings. Triggers can be
-   * created via the
-   * {@link Trigger#Trigger(java.util.function.BooleanSupplier)} constructor with
-   * an arbitrary
-   * predicate, or via the named factories in {@link
-   * edu.wpi.first.wpilibj2.command.button.CommandGenericHID}'s subclasses for
-   * {@link
-   * CommandXboxController
-   * Xbox}/{@link edu.wpi.first.wpilibj2.command.button.CommandPS4Controller
-   * PS4} controllers or
-   * {@link edu.wpi.first.wpilibj2.command.button.CommandJoystick Flight
-   * joysticks}.
-   */
   private void configureBindings() {
     this.configureAutomatedBindings();
     this.configureXboxControllerBindings();
@@ -108,6 +103,10 @@ public class RobotContainer {
     Trigger autoCalibrateTeleop = new Trigger(
         () -> (!swerveDrive.isCalibrated && RobotState.isTeleop() && RobotState.isEnabled()));
     autoCalibrateTeleop.onTrue(new CenterSwerveModules(true));
+
+    // Trigger autoPullIn = new Trigger(() -> operatorBox.cubeMode() &&
+    // grabber.getSensor());
+    // autoPullIn.onTrue(new AutoPullIn());
   }
 
   /** Binds commands to xbox controller buttons. */
@@ -115,10 +114,9 @@ public class RobotContainer {
     Trigger forceCalibrate = driverController.back();
     forceCalibrate.onTrue(new CenterSwerveModules(true));
 
-    //Trigger resetNavx = driverController.start();
-    //resetNavx.onTrue(new InstantCommand(() -> swerveDrive.resetNavx()));
+    // Trigger resetNavx = driverController.start();
+    // resetNavx.onTrue(new InstantCommand(() -> swerveDrive.resetNavx()));
 
-    
     Trigger resetOdometry = driverController.start();
     resetOdometry.onTrue(new InstantCommand(() -> swerveDrive.resetOdometry()));
 
@@ -131,13 +129,6 @@ public class RobotContainer {
       SwerveDrive.kMaxAngularSpeedRadiansPerSecond = 2 * Math.PI;
       SwerveDrive.kMaxSpeedMetersPerSecond = 3.5;
     }));
-
-
-    Trigger holdAngleWhileDriving = driverController.rightBumper();
-    holdAngleWhileDriving.whileTrue(new HoldAngleWithXbox());
-
-    Trigger cancelAll = driverController.leftBumper();
-    cancelAll.onTrue(new InstantCommand(() -> CommandScheduler.getInstance().cancelAll()));
   }
 
   /** Binds commands to the operator box. */
@@ -147,6 +138,10 @@ public class RobotContainer {
 
   /** Binds commands to the operator stick. */
   private void configureOperatorStickBindings() {
-  
+
   }
+
+  /**
+   * Configures the autonomous chooser over Network Tables (e.g. Smart Dashboard).
+   */
 }
