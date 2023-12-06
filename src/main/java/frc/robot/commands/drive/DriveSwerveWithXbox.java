@@ -7,6 +7,7 @@
 
 package frc.robot.commands.drive;
 
+import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.CommandBase;
 import frc.robot.RobotContainer;
@@ -16,8 +17,13 @@ import frc.robot.subsystems.drive.SwerveDrive;
 public class DriveSwerveWithXbox extends CommandBase {
   private boolean fieldRelative = false;
 
+  private SlewRateLimiter xLimiter, yLimiter;
+  private double joystickMaxRate = 5;
+
   public DriveSwerveWithXbox() {
     this.addRequirements(RobotContainer.swerveDrive);
+    xLimiter = new SlewRateLimiter(joystickMaxRate);
+    yLimiter = new SlewRateLimiter(joystickMaxRate);
   }
 
   // Called just before this Command runs the first time
@@ -35,6 +41,7 @@ public class DriveSwerveWithXbox extends CommandBase {
     if (Math.abs(RobotContainer.driverController.getLeftY()) > 0.05) {
       xSpeed = RobotContainer.swerveDrive.sensControl(-RobotContainer.driverController.getLeftY()) * SwerveDrive.kMaxSpeedMetersPerSecond;
     }
+    xSpeed = xLimiter.calculate(xSpeed);
     SmartDashboard.putNumber("xSpeed", xSpeed);
 
     // Get the y speed or sideways/strafe speed. We are inverting this because
@@ -44,7 +51,9 @@ public class DriveSwerveWithXbox extends CommandBase {
     if (Math.abs(RobotContainer.driverController.getLeftX()) > 0.05) {
       ySpeed = RobotContainer.swerveDrive.sensControl(-RobotContainer.driverController.getLeftX())  * SwerveDrive.kMaxSpeedMetersPerSecond;
     }
+    ySpeed = yLimiter.calculate(ySpeed);
     SmartDashboard.putNumber("ySpeed", ySpeed);
+
 
     // Get the rate of angular rotation. We are inverting this because we want a
     // positive value when we pull to the left (remember, CCW is positive in

@@ -41,7 +41,7 @@ public class RobotContainer {
     return autoChooser.getSelected();
   }
 
-  public static final AHRS navx = new AHRS(Port.kUSB);
+  public static final AHRS navx = new AHRS(Port.kMXP);
 
   /**
    * Returns the angle or "yaw" of the robot in degrees. CW positive ranging from

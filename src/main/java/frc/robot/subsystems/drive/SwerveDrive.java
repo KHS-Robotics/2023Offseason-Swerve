@@ -31,10 +31,8 @@ import frc.robot.RobotContainer;
  * Represents a swerve drive style drivetrain.
  */
 public class SwerveDrive extends SubsystemBase {
-  public static double kMaxSpeedMetersPerSecond = 3.5;
-  public static double kMaxAngularSpeedRadiansPerSecond = 2 * Math.PI;
-  public static double kMaxAcceleration = 99;
-  public static double kMaxDeceleration = -8; // this is based on nothing at all
+  public static double kMaxSpeedMetersPerSecond = 0.5;
+  public static double kMaxAngularSpeedRadiansPerSecond = Math.PI / 6;
   public static double offset;
   public Pose2d startingPose;
   public double angleSetpoint;
@@ -135,9 +133,6 @@ public class SwerveDrive extends SubsystemBase {
     targetPid = new PIDController(Constants.TARGET_P, Constants.TARGET_I, Constants.TARGET_D);
     targetPid.enableContinuousInput(-180.0, 180.0);
     targetPid.setTolerance(1);
-
-    xRateLimiter = new SlewRateLimiter(kMaxAcceleration, kMaxDeceleration, 0);
-    yRateLimiter = new SlewRateLimiter(kMaxAcceleration, kMaxDeceleration, 0);
   }
 
   /**
@@ -172,7 +167,10 @@ public class SwerveDrive extends SubsystemBase {
    *                      field.
    */
   public void drive(double xSpeed, double ySpeed, double rot, boolean fieldRelative) {
-    if (Math.abs(rot) < 0.005 && Math.abs(xSpeed) < 0.015 && Math.abs(ySpeed) < 0.015) {
+    //double filteredX = xRateLimiter.calculate(xSpeed);
+    //double filteredY = yRateLimiter.calculate(ySpeed);
+
+    if (Math.abs(rot) < 0.005 && Math.abs(xSpeed) < 0.0015 && Math.abs(ySpeed) < 0.0015) {
       frontLeft.setDesiredState(new SwerveModuleState(0.0, Rotation2d.fromDegrees(frontLeft.getAngle())));
       frontRight.setDesiredState(new SwerveModuleState(0.0, Rotation2d.fromDegrees(frontRight.getAngle())));
       rearLeft.setDesiredState(new SwerveModuleState(0.0, Rotation2d.fromDegrees(rearLeft.getAngle())));
@@ -180,8 +178,8 @@ public class SwerveDrive extends SubsystemBase {
     } else {
       var swerveModuleStates = kinematics
           .toSwerveModuleStates(
-              fieldRelative ? ChassisSpeeds.fromFieldRelativeSpeeds(xRateLimiter.calculate(xSpeed), yRateLimiter.calculate(ySpeed), rot, getPose().getRotation())
-                  : new ChassisSpeeds(xRateLimiter.calculate(xSpeed), yRateLimiter.calculate(ySpeed), rot));
+              fieldRelative ? ChassisSpeeds.fromFieldRelativeSpeeds(xSpeed, ySpeed, rot, getPose().getRotation())
+                  : new ChassisSpeeds(xSpeed, ySpeed, rot));
 
       frontLeft.setDesiredState(swerveModuleStates[0]);
       frontRight.setDesiredState(swerveModuleStates[1]);
